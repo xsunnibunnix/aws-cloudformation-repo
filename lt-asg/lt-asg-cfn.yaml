@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Launch template for an auto-scaling group with associated security group
+
+Parameters: 
+  # Resource Parameters
+  iamStack:
+    Type: String
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+         - t3.micro
+         - t3.small
+  albStack:
+    Type: String
+  vpcStack:
+    Type: String
+  desiredCapacity:
+    Type: String
+    Default: 2
+  maxSize:
+    Type: String
+    Default: 4
+  minSize:
+    Type: String
+    Default: 2
+  
+
+  # Tag Parameters
+  owner:
+    Type: String
+    Default: sunnibunni
+  ownerEmail:
+    Type: String
+    Default: pacheco.sunny@gmail.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Mappings:
+  RegionMap:
+    us-east-1:
+      # NOTE Replace the ami ID as needed or use latest Amazon Linux AMI
+      web: #TODO Add AMI ID
+
+Resources: 
+  # Security Group
+  SecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Web based EC2 security group
+      VpcId: {'Fn::ImportValue': !Sub '${vpcStack}'}
+      SecurityGroupIngress:
+       - SourceSecurityGroupId: {'Fn::ImportValue': !Sub '${albStack}-alb-sg0'}
+         FromPort: 80
+         ToPort: 80
+         IpProtocol: TCP
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ssm-sg
+
+  # Launch Template
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData: 
+        EbsOptimized: true
+        IamInstanceProfile: 
+          Name: {'Fn::ImportValue': !Sub '${iamStack}-instance-profile'}
+        ImageId: !FindInMap [RegionMap, !Ref 'AWS::Region', web]
+        InstanceType: !Ref InstanceType
+        # TODO add KMS key stack
+        Monitoring:
+          Enabled: true
+        SecurityGroupIds:
+         - !GetAtt SecGroup.GroupId
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+            - Key: owner
+              Value: !Ref owner
+            - Key: ownerEmail
+              Value: !Ref ownerEmail
+            - Key: environment
+              Value: !Ref environment
+            - Key: Name
+              Value: !Sub ${AWS::StackName}-ssm-sg
+
+  # Auto Scaling Group
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MaxSize: !Ref maxSize
+      MinSize: !Ref minSize
+      DesiredCapacity: !Ref desiredCapacity
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.DefaultVersionNumber
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupMinSize
+            - GroupMaxSize
+      VPCZoneIdentifier:
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet0'}
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet1'}
+      TargetGroupARNs:
+        - {'Fn::ImportValue': !Sub '${albStack}-targetGroup0'}
+      # NOTE in future add NotificationConfigurations
+      Tags:
+      - Key: owner
+        Value: !Ref owner
+        PropagateAtLaunch: true
+      - Key: ownerEmail
+        Value: !Ref ownerEmail
+        PropagateAtLaunch: true
+      - Key: environment
+        Value: !Ref environment
+        PropagateAtLaunch: true
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-ec2-asg
+        PropagateAtLaunch: true
+
+# TODO add scaling policies and lifecycle hooks

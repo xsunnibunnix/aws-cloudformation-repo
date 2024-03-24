@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create VPC Endpoint(s) for SSM Services
+
+Parameters:
+  # Resource parameters
+  vpcStack:
+    Type: String
+  
+  # Tag parameters
+  owner:
+    Type: String
+    Default: sunnibunni
+  ownerEmail:
+    Type: String
+    Default: pacheco.sunny@gmail.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Resources:
+  # Security Group
+  endpointSg0:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Interface endpoint SG for SSM
+      VpcId:  {'Fn::ImportValue': !Sub '${vpcStack}'}
+      SecurityGroupIngress:
+        - CidrIp: {'Fn::ImportValue': !Sub '${vpcStack}-cidr'}
+          FromPort: 443
+          ToPort: 443
+          IpProtocol: TCP
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ssm-sg
+  
+  # SSM
+  vpcEndpoint0:
+    Type: AWS::EC2::VPCEndpoint
+    DependsOn:
+      - endpointSg0
+    Properties:
+      SecurityGroupIds:
+        - !GetAtt endpointSg0.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      SubnetIds:
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet0'}
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet1'}
+      VpcEndpointType: Interface
+      VpcId: {'Fn::ImportValue': !Sub '${vpcStack}'}
+
+  # EC2 Messages
+  vpcEndpoint1:
+    Type: AWS::EC2::VPCEndpoint
+    DependsOn:
+      - endpointSg0
+    Properties:
+      SecurityGroupIds:
+        - !GetAtt endpointSg0.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      SubnetIds:
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet0'}
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet1'}
+      VpcEndpointType: Interface
+      VpcId: {'Fn::ImportValue': !Sub '${vpcStack}'}
+  
+  # SSM Messages
+  vpcEndpoint2:
+    Type: AWS::EC2::VPCEndpoint
+    DependsOn:
+      - endpointSg0
+    Properties:
+      SecurityGroupIds:
+        - !GetAtt endpointSg0.GroupId
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      SubnetIds:
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet0'}
+        - {'Fn::ImportValue': !Sub '${vpcStack}-privateSubnet1'}
+      VpcEndpointType: Interface
+      VpcId: {'Fn::ImportValue': !Sub '${vpcStack}'}

@@ -1,0 +1,105 @@
+Description: Deploy an Application Load Balancer
+
+Parameters:
+  # Resource Parameters
+  vpcStack:
+    Type: String
+
+  # Tag Parameters
+  owner:
+    Type: String
+    Default: sunnibunni
+  ownerEmail:
+    Type: String
+    Default: pacheco.sunny@gmail.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Resources:
+  # ALB Security Group
+  ALBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for internet-facing ALB
+      SecurityGroupIngress:
+       - CidrIp: 0.0.0.0/0
+         FromPort: 80
+         ToPort: 80
+         IpProtocol: tcp
+      VpcId: {'Fn::ImportValue': !Sub '${vpcStack}'}
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-alb-sg
+
+  # ALB
+  ALB:
+   Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+   Properties:
+    LoadBalancerAttributes:
+     - Key: load_balancing.cross_zone.enabled
+       Value: true
+    Scheme: internet-facing
+    SecurityGroups:
+     - !Ref ALBSecGroup
+    SubnetMappings:
+     - SubnetId: {'Fn::ImportValue': !Sub '${vpcStack}-publicSubnet0'}
+     - SubnetId: {'Fn::ImportValue': !Sub '${vpcStack}-publicSubnet1'}
+    Tags:
+      - Key: owner
+        Value: !Ref owner
+      - Key: ownerEmail
+        Value: !Ref ownerEmail
+      - Key: environment
+        Value: !Ref environment
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-alb
+
+  # ALB Listener
+  ALBListener:
+   Type: AWS::ElasticLoadBalancingV2::Listener
+   Properties:
+    DefaultActions:
+     - Type: forward
+       Order: 1
+       TargetGroupArn: !Ref ALBTargetGroup
+    LoadBalancerArn: !Ref ALB
+    Port: 80
+    Protocol: HTTP
+
+  # Target Group
+  ALBTargetGroup:
+   Type: AWS::ElasticLoadBalancingV2::TargetGroup
+   Properties:
+    HealthCheckIntervalSeconds: 10
+    HealthCheckPath: /
+    HealthCheckPort: 80
+    HealthCheckProtocol: HTTP
+    HealthCheckTimeoutSeconds: 5
+    HealthyThresholdCount: 3
+    Matcher:
+      HttpCode: 200
+    Port: 80
+    Protocol: HTTP
+    UnhealthyThresholdCount: 2
+    VpcId: {'Fn::ImportValue': !Sub '${vpcStack}'}
+
+Outputs:
+  ALBTargetGroup:
+   Value: !Ref ALBTargetGroup
+   Export:
+    Name: !Sub '${AWS::StackName}-targetGroup0'
+  
+  ALBSecGroup:
+   Value: !GetAtt ALBSecGroup.GroupId
+   Export:
+    Name: !Sub '${AWS::StackName}-alb-sg0'

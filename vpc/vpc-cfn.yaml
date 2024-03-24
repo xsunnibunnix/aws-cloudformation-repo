@@ -1,0 +1,374 @@
+Description: A template to deploy a VPC with 2 public and 2 private subnets with an IGW and NAT gateways and associated security groups and route tables
+
+Parameters:
+  # Resource parameters
+  vpcCIDR:
+    Type: String
+    Default: 10.98.0.0/16
+  publicSubnet0CIDR:
+    Type: String
+    Default: 10.98.0.0/20
+  publicSubnet1CIDR:
+    Type: String
+    Default: 10.98.64.0/20
+  privateSubnet0CIDR:
+    Type: String
+    Default: 10.98.32.0/19
+  privateSubnet1CIDR:
+    Type: String
+    Default: 10.98.96.0/19
+
+  # Tag parameters
+  owner:
+    Type: String
+    Default: sunnibunni
+  ownerEmail:
+    Type: String
+    Default: pacheco.sunny@gmail.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+Resources:
+  vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref vpcCIDR
+      EnableDnsSupport: true
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  # IGW
+  igw0:
+    Type: AWS::EC2::InternetGateway
+    DependsOn:
+      - vpc
+    Properties:
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    DependsOn:
+      - igw0
+    Properties:
+      VpcId: !Ref vpc
+      InternetGatewayId: !Ref igw0
+
+  # 2x NAT EIP
+  natEip0:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-eip0"
+  natEip1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-eip1"
+
+  # 2x NAT Gateway
+  natGw0:
+    Type: AWS::EC2::NatGateway
+    DependsOn:
+      - natEip0
+      - publicSubnet0
+    Properties:
+      AllocationId: !GetAtt natEip0.AllocationId
+      SubnetId: !Ref publicSubnet0
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-natgw0"
+  natGw1:
+    Type: AWS::EC2::NatGateway
+    DependsOn:
+      - natEip1
+      - publicSubnet1
+    Properties:
+      AllocationId: !GetAtt natEip1.AllocationId
+      SubnetId: !Ref publicSubnet1
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-natgw1"
+
+  # Subnets 2x public
+  publicSubnet0:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      VpcId: !Ref vpc
+      CidrBlock: !Ref publicSubnet0CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-pub-subnet-0"
+  publicSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      VpcId: !Ref vpc
+      CidrBlock: !Ref publicSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-pub-subnet-1"
+
+  # Subnets 2x private
+  privateSubnet0:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      VpcId: !Ref vpc
+      CidrBlock: !Ref privateSubnet0CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-priv-subnet-0"
+  privateSubnet1:
+    Type: AWS::EC2::Subnet
+    DependsOn:
+      - vpc
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      VpcId: !Ref vpc
+      CidrBlock: !Ref privateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-priv-subnet-1"
+
+  # Public Route Table
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn:
+      - vpc
+      - igw0
+      - AttachGateway
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-pub-routeTable0"
+
+  # Route Table 2x private
+  privRouteTable0:
+    Type: AWS::EC2::RouteTable
+    DependsOn:
+      - vpc
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-priv-routeTable0"
+  privRouteTable1:
+    Type: AWS::EC2::RouteTable
+    DependsOn:
+      - vpc
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-priv-routeTable0"
+
+  # Routes (public)
+  pubRoute0:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - PublicRouteTable
+      - igw0
+      - AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref igw0
+
+  # Route table associations
+  pub0Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - publicSubnet0
+    Properties:
+      SubnetId: !Ref publicSubnet0
+      RouteTableId: !Ref PublicRouteTable
+  pub1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - PublicRouteTable
+      - publicSubnet1
+    Properties:
+      SubnetId: !Ref publicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+  priv0Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - privRouteTable0
+      - privateSubnet0
+    Properties:
+      SubnetId: !Ref privateSubnet0
+      RouteTableId: !Ref privRouteTable0
+  priv1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    DependsOn:
+      - privRouteTable1
+      - privateSubnet1
+    Properties:
+      SubnetId: !Ref privateSubnet1
+      RouteTableId: !Ref privRouteTable1
+
+  # Routes (private)
+  privRoute0:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - PublicRouteTable
+      - natGw0
+    Properties:
+      RouteTableId: !Ref privRouteTable0
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGw0
+  privRoute1:
+    Type: AWS::EC2::Route
+    DependsOn:
+      - PublicRouteTable
+      - natGw1
+    Properties:
+      RouteTableId: !Ref privRouteTable1
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref natGw1
+
+Outputs:
+  vpc:
+   Value: !Ref vpc
+   Export:
+    Name: !Sub '${AWS::StackName}'
+
+  vpcCIDR:
+   Value: !GetAtt vpc.CidrBlock
+   Export:
+    Name: !Sub '${AWS::StackName}-cidr'
+     
+  publicSubnet0:
+   Value: !Ref publicSubnet0
+   Export:
+    Name: !Sub '${AWS::StackName}-publicSubnet0'
+
+  publicSubnet1:
+   Value: !Ref publicSubnet1
+   Export:
+    Name: !Sub '${AWS::StackName}-publicSubnet1'
+
+  privateSubnet0:
+   Value: !Ref privateSubnet0
+   Export:
+    Name: !Sub '${AWS::StackName}-privateSubnet0'
+
+  privateSubnet1:
+   Value: !Ref privateSubnet1
+   Export:
+    Name: !Sub '${AWS::StackName}-privateSubnet1'
+
+  publicRouteTable:
+   Value: !Ref PublicRouteTable
+   Export:
+    Name: !Sub '${AWS::StackName}-publicRouteTable'
+
+  privateRouteTable0:
+   Value: !Ref privRouteTable0
+   Export:
+    Name: !Sub '${AWS::StackName}-privateRouteTable0'
+
+  privateRouteTable1:
+   Value: !Ref privRouteTable1
+   Export:
+    Name: !Sub '${AWS::StackName}-privateRouteTable1'

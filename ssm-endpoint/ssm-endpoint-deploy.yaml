@@ -1,0 +1,32 @@
+name: SSM Endpoint Deploy
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  ssm-endpoint-deploy:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: AWS Config
+        run: aws configure set default.region $AWS_REGION
+      - name: Template Validation
+        run: aws cloudformation validate-template --template-body file://${{env.FILE_NAME}}
+      - name: Deploy
+        run: |
+          aws cloudformation deploy --template-file ./${{env.FILE_NAME}} --stack-name $stackName --no-execute-changeset --no-fail-on-empty-changeset --parameter-overrides vpcStack=$vpcStack
+          aws cloudformation wait stack-exists --stack-name $stackName
+          aws cloudformation update-termination-protection --stack-name $stackName --enable-termination-protection
+        env:
+          # NOTE: change vpc stack name as needed
+          stackName: ssm-${{env.environment}}
+          vpcStack: vpc-${{env.environment}}
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: us-east-1
+  FILE_NAME: ssm-endpoint-cfn.yaml
+  environment: development

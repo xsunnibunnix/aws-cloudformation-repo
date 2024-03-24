@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: A template to deploy an VPC endpoint for private subnets to communicate with S3
+
+Parameters: 
+  vpcStack:
+    Type: String
+
+Resources: 
+  S3Endpoint:
+   Type: AWS::EC2::VPCEndpoint
+   Properties:
+    RouteTableIds:
+      - {'Fn::ImportValue': !Sub '${vpcStack}-privateRouteTable0'}
+      - {'Fn::ImportValue': !Sub '${vpcStack}-privateRouteTable1'}
+    ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+    VpcId: {'Fn::ImportValue': !Sub '${vpcStack}'}
+    VpcEndpointType: Gateway

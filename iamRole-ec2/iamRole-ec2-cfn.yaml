@@ -1,0 +1,30 @@
+Description: Deploy IAM resources for a web-based server
+
+Resources:
+  iamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: EC2 role
+      AssumeRolePolicyDocument: 
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+  
+  iamInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref iamRole
+
+Outputs:
+  iamInstanceProfile:
+    Value: !Ref iamInstanceProfile
+    Export:
+      Name: !Sub '${AWS::StackName}-instance-profile'

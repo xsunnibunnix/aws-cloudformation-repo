@@ -1,0 +1,88 @@
+name: Deploy VPC, KMS key, SSM endpoints, IAM role for EC2 instances, Launch Template + Auto-Scaling Group, and Application Load Balancer
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: AWS Config
+        run: aws configure set default.region $AWS_REGION
+      - name: VPC Template Validation
+        run: aws cloudformation validate-template --template-body file://vpc-cfn.yaml
+      - name: KMS Template Validation
+        run: aws cloudformation validate-template --template-body file://kms-cfn.yaml
+      - name: SSM Endpoints Template Validation
+        run: aws cloudformation validate-template --template-body file://ssm-endpoint-cfn.yaml
+      - name: IAM Role Template Validation
+        run: aws cloudformation validate-template --template-body file://iamRole-ec2-cfn.yaml
+      - name: Launch Template + ASG Template Validation
+        run: aws cloudformation validate-template --template-body file://lt-asg-cfn.yaml
+      - name: ALB Template Validation
+        run: aws cloudformation validate-template --template-body file://alb-cfn.yaml
+  deploy:
+    needs: validate
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: VPC Deploy
+        run: |
+          aws cloudformation deploy --template-file ./vpc-cfn.yaml --stack-name $stackName --no-execute-changeset --no-fail-on-empty-changeset --tags owner=$owner ownerEmail=$ownerEmail environment=$environment
+          aws cloudformation wait stack-exists --stack-name $stackName
+          aws cloudformation update-termination-protection --stack-name $stackName --enable-termination-protection
+        env:
+          stackName: vpc-${{env.environment}}
+      - name: KMS Deploy
+        run: |
+          aws cloudformation deploy --template-file ./kms-cfn.yaml --stack-name $stackName --no-execute-changeset --no-fail-on-empty-changeset --tags owner=$owner ownerEmail=$ownerEmail environment=$environment
+          aws cloudformation wait stack-exists --stack-name $stackName
+          aws cloudformation update-termination-protection --stack-name $stackName --enable-termination-protection
+        env:
+          stackName: kms-${{env.environment}}
+      - name: SSM Endpoints Deploy
+        run: |
+          aws cloudformation deploy --template-file ./ssm-endpoint-cfn.yaml --stack-name $stackName --no-execute-changeset --no-fail-on-empty-changeset --parameter-overrides vpcStack=$vpcStack --tags owner=$owner ownerEmail=$ownerEmail environment=$environment
+          aws cloudformation wait stack-exists --stack-name $stackName
+          aws cloudformation update-termination-protection --stack-name $stackName --enable-termination-protection
+        env:
+          stackName: ssm-${{env.environment}}
+          vpcStack: vpc-${{env.environment}}
+      - name: IAM Role Deploy
+        run: |
+          aws cloudformation deploy --template-file ./iamRole-ec2-cfn.yaml --stack-name $stackName --no-execute-changeset --no-fail-on-empty-changeset --tags owner=$owner ownerEmail=$ownerEmail environment=$environment --capabilities CAPABILITY_IAM
+          aws cloudformation wait stack-exists --stack-name $stackName
+          aws cloudformation update-termination-protection --stack-name $stackName --enable-termination-protection
+        env:
+          stackName: iamEc2Role-${{env.environment}}
+      - name: Launch Template + ASG Deploy
+        run: |
+          aws cloudformation deploy --template-file ./lt-asg-cfn.yaml --stack-name $stackName --no-execute-changeset --no-fail-on-empty-changeset --parameter-overrides iamStack=$iamStack vpcStack=$vpcStack albStack=$albStack --tags owner=$owner ownerEmail=$ownerEmail environment=$environment
+          aws cloudformation wait stack-exists --stack-name $stackName
+          aws cloudformation update-termination-protection --stack-name $stackName --enable-termination-protection
+        env:
+          stackName: lt-asg-${{env.environment}}
+          iamStack: iamEc2Role-${{env.environment}}
+          vpcStack: vpc-${{env.environment}}
+          albStack: alb-${{env.environment}}
+      - name: ALB Deploy
+        run: |
+          aws cloudformation deploy --template-file ./alb-cfn.yaml --stack-name $stackName --no-execute-changeset --no-fail-on-empty-changeset --parameter-overrides vpcStack=$vpcStack --tags owner=$owner ownerEmail=$ownerEmail environment=$environment
+          aws cloudformation wait stack-exists --stack-name $stackName
+          aws cloudformation update-termination-protection --stack-name $stackName --enable-termination-protection
+        env:
+          stackName: alb-${{env.environment}}
+          vpcStack: vpc-${{env.environment}}
+
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: us-east-1
+  environment: development
+  owner: sunnibunni
+  ownerEmail: pacheco.sunny@gmail.com

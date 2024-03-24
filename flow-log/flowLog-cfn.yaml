@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: CloudFormation template to launch VPC Flow Logs
+
+Parameters:
+  # Resource parameters
+  vpcStack:
+    Type: String
+  numOfRetentionDays:
+    Type: Number
+    Default: 30
+
+  # Tag parameters
+  owner:
+    Type: String
+    Default: sunnibunni
+  ownerEmail:
+    Type: String
+    Default: pacheco.sunny@gmail.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Resources: 
+  # Log Group
+  logGroup0:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: !Ref numOfRetentionDays
+
+  # Flow log policy
+  flowLogPolicy0:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Managed policy for flow log IAM role
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+            Resource: '*'
+
+  # Flow log role
+  flowLogRole0:
+    Type: AWS::IAM::Role
+    DependsOn: 
+      - flowLogPolicy0
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - vpc-flow-logs.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: IAM Role used by FlowLogs to write to CloudWatch Logs
+      ManagedPolicyArns:
+           - !Ref flowLogPolicy0
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-flowLogRole"
+
+  # Flow log
+  flowLog0:
+    Type: AWS::EC2::FlowLog
+    DependsOn:
+      - flowLogRole0
+      - logGroup0
+    Properties:
+      DeliverLogsPermissionArn: !GetAtt flowLogRole0.Arn
+      LogDestination: !GetAtt logGroup0.Arn
+      ResourceId: {'Fn::ImportValue': !Sub '${vpcStack}'}
+      ResourceType: VPC
+      TrafficType: ALL
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-flowLog"

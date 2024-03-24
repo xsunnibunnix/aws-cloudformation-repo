@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create CMK for SSE-KMS
+
+Parameters: 
+  numOfDays:
+    Type: String
+    Default: 7
+  
+  # Tag parameters
+  owner:
+    Type: String
+    Default: sunnibunni
+  ownerEmail:
+    Type: String
+    Default: pacheco.sunny@gmail.com
+  environment:
+    Type: String
+    Default: development
+    AllowedValues:
+      - development
+      - production
+
+Resources: 
+  # KMS Key
+  key0:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    Properties:
+      Description: KMS key for S3
+      Enabled: true
+      EnableKeyRotation: true
+      # NOTE Key policy allows ASG to access KMS key to encrypt the EBS volume
+      KeyPolicy: 
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - kms:*
+            Resource: '*'
+          - Effect: Allow
+            Principal:
+              AWS:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action:
+            - kms:Encrypt
+            - kms:Decrypt
+            - kms:ReEncrypt*
+            - kms:GenerateDataKey*
+            - kms:DescribeKey
+            Resource: "*"
+          - Effect: Allow
+            Principal:
+              AWS:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling
+            Action:
+            - kms:CreateGrant
+            Resource: "*"
+            Condition:
+              Bool:
+                kms:GrantIsForAWSResource: true
+      KeyUsage: ENCRYPT_DECRYPT
+      PendingWindowInDays: !Ref numOfDays
+      Tags:
+        - Key: owner
+          Value: !Ref owner
+        - Key: ownerEmail
+          Value: !Ref ownerEmail
+        - Key: environment
+          Value: !Ref environment
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ssm-sg
+
+  # KMS Key Alias
+  kmsAlias:
+   Type: AWS::KMS::Alias
+   DependsOn:
+    - key0
+   Properties:
+    AliasName: 'alias/kms-alias'
+    TargetKeyId: !Ref key0
+
+Outputs:
+  key0:
+   Value: !GetAtt key0.Arn
+   Export:
+    Name: !Sub '${AWS::StackName}-kms-key'
